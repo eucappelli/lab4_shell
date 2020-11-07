@@ -51,11 +51,24 @@ int launch_process(char **args)
 {
     pid_t pid;
     int status;
+    int bg;
+    int current_cmd_lenght;
 
+    current_cmd_lenght = 0;
+    int i;
+    for(i = 0; args[i] != NULL; i++)
+    {
+        current_cmd_lenght++;
+    }
+
+    //checa se e para o processo rodar em background
+    if((bg = (*args[current_cmd_lenght-1] == '&')) != 0)
+        args[--current_cmd_lenght] = NULL;
+    
     pid = fork();
     if (pid == 0)
     {
-        if (execvp(args[0], args) == -1)
+        if (execvp(args[0], args) < 0)
         {
             perror("Erro ao executar processo");
         }
@@ -67,15 +80,22 @@ int launch_process(char **args)
     }
     else
     {
-        do
+        if(bg)
         {
-            waitpid(pid, &status, WUNTRACED);
-        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+            /*printf("\n%d %s\n", pid, args[0]);*/
+        }
+        else
+        {
+            do{
+                waitpid(pid, &status, WUNTRACED);
+            } while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
+        }
 
     return 1;
 }
 
+/*Recebe comandos separados em vetor de strings como argumento*/
 int execute(char **args)
 {
     int i;
@@ -89,10 +109,11 @@ int execute(char **args)
     {
         if (strcmp(args[0], command_list[i]) == 0)
         {
+            /*Se for comando builtin, chama funcao builtin*/
             return (*builtin_functions[i])(args);
         }
     }
-
+    /*Se nao for comando builtin chama funcao nao builtin*/
     return launch_process(args);
 }
 
