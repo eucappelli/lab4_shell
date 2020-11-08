@@ -4,31 +4,19 @@
 #include <stdio.h>
 #include <string.h>
 
-#define BACKGROUND_EXECUTION 0
-#define FOREGROUND_EXECUTION 1
+#define BACKGROUND_EXECUTION 1
+#define FOREGROUND_EXECUTION 0
 
 #define TOKEN_SIZE 64
 #define TOKEN_DELIMITER " \t\r\n\a"
 #define MAX_JOBS 20
 
 const char *STATUS_STRING[] = {
-    "running",
-    "done",
-    "suspended",
-    "continued",
-    "terminated"};
-
-struct process
-{
-    char *command;
-    int argc;
-    char **argv;
-    char *input_path;
-    char *output_path;
-    pid_t pid;
-    int type;
-    int status;
-    struct process *next;
+    "EXECUTANDO",
+    "EXECUTADO",
+    "SUSPENSO",
+    "EM ANDAMENTO",
+    "PARADO",
 };
 
 struct job
@@ -48,18 +36,18 @@ struct shell_info *shell;
 
 int builtin_cd(char **args);
 int builtin_exit(char **args);
+int builtin_jobs();
 
 char *command_list[] = {
     "cd",
     "exit",
-    "bg",
-    "fg",
     "jobs",
 };
 
 int (*builtin_functions[])(char **) = {
     &builtin_cd,
     &builtin_exit,
+    &builtin_jobs,
 };
 
 int commands_length()
@@ -86,6 +74,55 @@ int builtin_cd(char **args)
 int builtin_exit(char **args)
 {
     return 0;
+}
+
+void update_process_mode(int pid, int index)
+{
+    int status = 0;
+
+    waitpid(pid, &status, WUNTRACED);
+    if (WIFEXITED(status))
+    {
+        shell->jobs[index]->mode = 1;
+    }
+    else if (WIFSIGNALED(status))
+    {
+        shell->jobs[index]->mode = 4;
+    }
+    else if (WSTOPSIG(status))
+    {
+        shell->jobs[index]->mode = 2;
+    }
+}
+
+int builtin_jobs()
+{
+    int i;
+    for (i = 0; i < MAX_JOBS; i++)
+    {
+        if (shell->jobs[i] != NULL)
+        {
+            update_process_mode(shell->jobs[i]->pid, i);
+            printf("[%d]   [%d]    [%s]   [%s]", shell->jobs[i]->id, shell->jobs[i]->pid, STATUS_STRING[shell->jobs[i]->mode], shell->jobs[i]->command);
+        }
+    }
+}
+
+int get_next_id()
+{
+    int i;
+    for (i = 1; i < MAX_JOBS + 1; i++)
+    {
+        if (shell->jobs[i] == NULL)
+        {
+            return i;
+        }
+    }
+}
+
+void insert_job(struct job *job)
+{
+    shell->jobs[job->id - 1] = job;
 }
 
 int launch_process(char **args)
@@ -121,6 +158,13 @@ int launch_process(char **args)
     }
     else
     {
+        struct job *job = (struct job *)malloc(sizeof(struct job));
+        job->command = args[0];
+        job->id = get_next_id();
+        job->mode = bg;
+        job->pid = pid;
+        insert_job(job);
+
         if (bg)
         {
             printf("\n%d %s\n", pid, args[0]);
@@ -196,21 +240,6 @@ char **handle_args(char *input)
     return tokens;
 }
 
-struct job *parse_command(char *input)
-{
-    int bufsize = TOKEN_SIZE, index = 0;
-    char **tokens = malloc(bufsize * sizeof(char *));
-    int mode = FOREGROUND_EXECUTION;
-
-    struct process *root_proc = NULL, *proc = NULL;
-
-    if (!tokens)
-    {
-        fprintf(stderr, "Erro de alocação\n");
-        exit(EXIT_FAILURE);
-    }
-}
-
 char *read_input(void)
 {
     char *input = NULL;
@@ -245,8 +274,6 @@ void shell_loop(void)
         input = read_input();
         args = handle_args(input);
         status = execute(args);
-        // job = parse_command(input);
-        // status = launch_job(args);
 
         free(input);
         free(args);
@@ -288,6 +315,7 @@ void init_shell()
 
 int main(int argc, char **argv)
 {
+    init_shell();
     shell_loop();
 
     return EXIT_SUCCESS;
