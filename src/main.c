@@ -39,17 +39,20 @@ struct shell_info *shell;
 int builtin_cd(char **args);
 int builtin_exit(char **args);
 int builtin_jobs();
+int builtin_fg(char **args);
 
 char *command_list[] = {
     "cd",
     "exit",
     "jobs",
+    "fg",
 };
 
 int (*builtin_functions[])(char **) = {
     &builtin_cd,
     &builtin_exit,
     &builtin_jobs,
+    &builtin_fg,
 };
 
 int commands_length()
@@ -83,24 +86,13 @@ void remove_job(int index)
     shell->jobs[index] = NULL;
 }
 
-void update_process_mode(int pid, int index)
+int get_pid(int id)
 {
-    int status = 0;
-
-    waitpid(pid, &status, WUNTRACED);
-    if (WIFEXITED(status))
+    if (shell->jobs[id - 1] != NULL)
     {
-        shell->jobs[index]->mode = 1;
-        // remove_job(index);
+        return shell->jobs[id - 1]->pid;
     }
-    else if (WIFSIGNALED(status))
-    {
-        shell->jobs[index]->mode = 4;
-    }
-    else if (WSTOPSIG(status))
-    {
-        shell->jobs[index]->mode = 2;
-    }
+    return -1;
 }
 
 int builtin_jobs()
@@ -108,12 +100,59 @@ int builtin_jobs()
     int i;
     for (i = 0; i < MAX_JOBS; i++)
     {
-        /*update_process_mode(shell->jobs[i]->pid, i);*/
         if (shell->jobs[i] != NULL)
         {
-            printf("[%d]   [%d]    %s   [%s]\n", shell->jobs[i]->id, shell->jobs[i]->pid, STATUS_STRING[shell->jobs[i]->mode], shell->jobs[i]->command);
+            printf("[%d]   [%d]    %s   %s\n", shell->jobs[i]->id, shell->jobs[i]->pid, STATUS_STRING[shell->jobs[i]->mode], shell->jobs[i]->command);
         }
     }
+    return 1;
+}
+
+int set_job_status(int id, int status)
+{
+    if (id > MAX_JOBS || shell->jobs[id] == NULL)
+    {
+        return -1;
+    }
+
+    int i;
+
+    return 0;
+}
+
+int builtin_fg(char **args)
+{
+    int job_id;
+    pid_t pid;
+
+    if (args[1] == NULL)
+    {
+        fprintf(stderr, "Sintaxe correta: fg %%id\n");
+    }
+
+    if (args[1][0] == '%')
+    {
+        job_id = atoi(args[1] + 1);
+        pid = get_pid(job_id);
+        if (pid < 0)
+        {
+            printf("brash: fg %d: Job não encontrado\n", job_id);
+            return 1;
+        }
+    }
+    else
+    {
+        fprintf(stderr, "Sintaxe correta: fg %%id\n");
+        return 1;
+    }
+
+    if (kill(pid, SIGCONT) < 0)
+    {
+        printf("brash: Job não encontrado\n");
+        return 0;
+    }
+    printf("id ai: %d", job_id);
+    remove_job(job_id);
     return 1;
 }
 
@@ -194,9 +233,9 @@ int launch_process(char **args)
         job->id = job_id;
         job->mode = bg;
         job->pid = pid;
-        /*printf("novo job: %d", job->id);*/
-        if(!erro){
-          insert_job(job);
+        if (!erro)
+        {
+            insert_job(job);
         }
 
         if (bg)
@@ -208,13 +247,18 @@ int launch_process(char **args)
             do
             {
                 waitpid(pid, &status, WUNTRACED);
-                if(WIFSTOPPED(status)){
+                if (WIFSTOPPED(status))
+                {
                     shell->jobs[job_id - 1]->mode = 2;
-                    printf("%s %s\n", shell->jobs[job_id - 1]->command,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
-                } else if(WIFSIGNALED(status)){
+                    printf("%s %s\n", shell->jobs[job_id - 1]->command, STATUS_STRING[shell->jobs[job_id - 1]->mode]);
+                }
+                else if (WIFSIGNALED(status))
+                {
                     shell->jobs[job_id - 1]->mode = 4;
-                    printf("%d %s\n", shell->jobs[job_id - 1]->pid,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
-                } else if(WIFEXITED(status)){
+                    printf("%d %s\n", shell->jobs[job_id - 1]->pid, STATUS_STRING[shell->jobs[job_id - 1]->mode]);
+                }
+                else if (WIFEXITED(status))
+                {
                     remove_job(job_id - 1);
                 }
             } while (!WIFEXITED(status) && !WIFSIGNALED(status) && !WIFSTOPPED(status));
