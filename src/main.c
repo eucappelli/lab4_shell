@@ -151,8 +151,7 @@ int builtin_fg(char **args)
         printf("brash: Job não encontrado\n");
         return 0;
     }
-    printf("id ai: %d", job_id);
-    remove_job(job_id);
+    remove_job(job_id - 1);
     return 1;
 }
 
