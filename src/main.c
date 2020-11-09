@@ -156,6 +156,7 @@ int launch_process(char **args)
     int status;
     int bg;
     int current_cmd_length;
+    int erro = 0;
 
     current_cmd_length = 0;
     int i;
@@ -177,6 +178,7 @@ int launch_process(char **args)
         if (execvp(args[0], args) < 0)
         {
             perror("Erro ao executar processo");
+            erro = 1;
         }
         exit(EXIT_FAILURE);
     }
@@ -188,12 +190,14 @@ int launch_process(char **args)
     {
         int job_id = get_next_id();
         struct job *job = (struct job *)malloc(sizeof(struct job));
-        job->command = args[0];
+        job->command = strdup(args[0]);
         job->id = job_id;
         job->mode = bg;
         job->pid = pid;
         /*printf("novo job: %d", job->id);*/
-        insert_job(job);
+        if(!erro){
+          insert_job(job);
+        }
 
         if (bg)
         {
@@ -206,10 +210,12 @@ int launch_process(char **args)
                 waitpid(pid, &status, WUNTRACED);
                 if(WIFSTOPPED(status)){
                     shell->jobs[job_id - 1]->mode = 2;
-                    printf("%d %s\n", shell->jobs[job_id - 1]->pid,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
+                    printf("%s %s\n", shell->jobs[job_id - 1]->command,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
                 } else if(WIFSIGNALED(status)){
                     shell->jobs[job_id - 1]->mode = 4;
                     printf("%d %s\n", shell->jobs[job_id - 1]->pid,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
+                } else if(WIFEXITED(status)){
+                    remove_job(job_id - 1);
                 }
             } while (!WIFEXITED(status) && !WIFSIGNALED(status) && !WIFSTOPPED(status));
         }
