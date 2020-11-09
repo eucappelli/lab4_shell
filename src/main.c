@@ -19,6 +19,8 @@ const char *STATUS_STRING[] = {
     "PARADO",
 };
 
+int PID;
+
 struct job
 {
     int id;
@@ -76,6 +78,11 @@ int builtin_exit(char **args)
     return 0;
 }
 
+void remove_job(int index)
+{
+    shell->jobs[index] = NULL;
+}
+
 void update_process_mode(int pid, int index)
 {
     int status = 0;
@@ -84,6 +91,7 @@ void update_process_mode(int pid, int index)
     if (WIFEXITED(status))
     {
         shell->jobs[index]->mode = 1;
+        // remove_job(index);
     }
     else if (WIFSIGNALED(status))
     {
@@ -100,12 +108,13 @@ int builtin_jobs()
     int i;
     for (i = 0; i < MAX_JOBS; i++)
     {
+        update_process_mode(shell->jobs[i]->pid, i);
         if (shell->jobs[i] != NULL)
         {
-            update_process_mode(shell->jobs[i]->pid, i);
-            printf("[%d]   [%d]    [%s]   [%s]", shell->jobs[i]->id, shell->jobs[i]->pid, STATUS_STRING[shell->jobs[i]->mode], shell->jobs[i]->command);
+            printf("[%d]   [%d]    %s   [%s]\n", shell->jobs[i]->id, shell->jobs[i]->pid, STATUS_STRING[shell->jobs[i]->mode], shell->jobs[i]->command);
         }
     }
+    return 1;
 }
 
 int get_next_id()
@@ -123,6 +132,22 @@ int get_next_id()
 void insert_job(struct job *job)
 {
     shell->jobs[job->id - 1] = job;
+}
+
+void stopped()
+{
+    if (PID == 0)
+    {
+        kill(PID, SIGTSTP);
+    }
+}
+
+void interrupted()
+{
+    if (PID == 0)
+    {
+        kill(PID, SIGINT);
+    }
 }
 
 int launch_process(char **args)
@@ -144,8 +169,11 @@ int launch_process(char **args)
         args[--current_cmd_length] = NULL;
 
     pid = fork();
+    PID = pid;
     if (pid == 0)
     {
+        signal(SIGINT, interrupted);
+        signal(SIGTSTP, stopped);
         if (execvp(args[0], args) < 0)
         {
             perror("Erro ao executar processo");
@@ -163,6 +191,7 @@ int launch_process(char **args)
         job->id = get_next_id();
         job->mode = bg;
         job->pid = pid;
+        printf("novo job: %d", job->id);
         insert_job(job);
 
         if (bg)
@@ -174,7 +203,7 @@ int launch_process(char **args)
             do
             {
                 waitpid(pid, &status, WUNTRACED);
-            } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+            } while (!WIFEXITED(status) && !WIFSIGNALED(status) && !WIFSTOPPED(status));
         }
     }
 
@@ -294,9 +323,8 @@ void init_shell()
     sigemptyset(&sigint_action.sa_mask);
     sigaction(SIGINT, &sigint_action, NULL);
 
-    signal(SIGQUIT, SIG_IGN);
     signal(SIGTSTP, SIG_IGN);
-    signal(SIGTTIN, SIG_IGN);
+    signal(SIGINT, SIG_IGN);
 
     // pid_t pid = getpid();
     // setpgid(pid, pid);
