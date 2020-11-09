@@ -186,12 +186,13 @@ int launch_process(char **args)
     }
     else
     {
+        int job_id = get_next_id();
         struct job *job = (struct job *)malloc(sizeof(struct job));
         job->command = args[0];
-        job->id = get_next_id();
+        job->id = job_id;
         job->mode = bg;
         job->pid = pid;
-        printf("novo job: %d", job->id);
+        /*printf("novo job: %d", job->id);*/
         insert_job(job);
 
         if (bg)
@@ -203,6 +204,10 @@ int launch_process(char **args)
             do
             {
                 waitpid(pid, &status, WUNTRACED);
+                if(WIFSTOPPED(status)){
+                    shell->jobs[job_id - 1]->mode = 2;
+                    printf("%s %s\n", shell->jobs[job_id - 1]->command,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
+                }
             } while (!WIFEXITED(status) && !WIFSIGNALED(status) && !WIFSTOPPED(status));
         }
     }
