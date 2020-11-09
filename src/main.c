@@ -108,7 +108,7 @@ int builtin_jobs()
     int i;
     for (i = 0; i < MAX_JOBS; i++)
     {
-        update_process_mode(shell->jobs[i]->pid, i);
+        /*update_process_mode(shell->jobs[i]->pid, i);*/
         if (shell->jobs[i] != NULL)
         {
             printf("[%d]   [%d]    %s   [%s]\n", shell->jobs[i]->id, shell->jobs[i]->pid, STATUS_STRING[shell->jobs[i]->mode], shell->jobs[i]->command);
@@ -120,11 +120,11 @@ int builtin_jobs()
 int get_next_id()
 {
     int i;
-    for (i = 1; i < MAX_JOBS + 1; i++)
+    for (i = 0; i < MAX_JOBS; i++)
     {
         if (shell->jobs[i] == NULL)
         {
-            return i;
+            return i + 1;
         }
     }
 }
@@ -206,7 +206,10 @@ int launch_process(char **args)
                 waitpid(pid, &status, WUNTRACED);
                 if(WIFSTOPPED(status)){
                     shell->jobs[job_id - 1]->mode = 2;
-                    printf("%s %s\n", shell->jobs[job_id - 1]->command,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
+                    printf("%d %s\n", shell->jobs[job_id - 1]->pid,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
+                } else if(WIFSIGNALED(status)){
+                    shell->jobs[job_id - 1]->mode = 4;
+                    printf("%d %s\n", shell->jobs[job_id - 1]->pid,STATUS_STRING[shell->jobs[job_id - 1]->mode]);
                 }
             } while (!WIFEXITED(status) && !WIFSIGNALED(status) && !WIFSTOPPED(status));
         }
